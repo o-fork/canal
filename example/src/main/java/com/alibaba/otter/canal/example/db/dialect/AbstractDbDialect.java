@@ -21,7 +21,6 @@ import com.google.common.base.Function;
 import com.google.common.collect.MigrateMap;
 import org.apache.commons.lang.exception.NestableRuntimeException;
 import org.apache.ddlutils.model.Table;
-import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -30,9 +29,7 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.Assert;
 
-import java.sql.Connection;
 import java.sql.DatabaseMetaData;
-import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -56,30 +53,29 @@ public abstract class AbstractDbDialect implements DbDialect {
         transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
 
         // 初始化一些数据
-        jdbcTemplate.execute(new ConnectionCallback() {
+        jdbcTemplate.execute((ConnectionCallback<Object>) c -> {
+            DatabaseMetaData meta = c.getMetaData();
+            databaseName = meta.getDatabaseProductName();
+            databaseMajorVersion = meta.getDatabaseMajorVersion();
+            databaseMinorVersion = meta.getDatabaseMinorVersion();
 
-            public Object doInConnection(Connection c) throws SQLException, DataAccessException {
-                DatabaseMetaData meta = c.getMetaData();
-                databaseName = meta.getDatabaseProductName();
-                databaseMajorVersion = meta.getDatabaseMajorVersion();
-                databaseMinorVersion = meta.getDatabaseMinorVersion();
-
-                return null;
-            }
+            return null;
         });
 
         initTables(jdbcTemplate);
     }
 
+    @Override
     public Table findTable(String schema, String table, boolean useCache) {
         List<String> key = Arrays.asList(schema, table);
-        if (useCache == false) {
+        if (!useCache) {
             tables.remove(key);
         }
 
         return tables.get(key);
     }
 
+    @Override
     public Table findTable(String schema, String table) {
         return findTable(schema, table, true);
     }
@@ -97,22 +93,19 @@ public abstract class AbstractDbDialect implements DbDialect {
     }
 
     private void initTables(final JdbcTemplate jdbcTemplate) {
-        this.tables = MigrateMap.makeComputingMap(new Function<List<String>, Table>() {
-
-            public Table apply(List<String> names) {
-                Assert.isTrue(names.size() == 2);
-                try {
-                    Table table = DdlUtils.findTable(jdbcTemplate, names.get(0), names.get(0), names.get(1));
-                    if (table == null) {
-                        throw new NestableRuntimeException("no found table [" + names.get(0) + "." + names.get(1)
-                                + "] , pls check");
-                    } else {
-                        return table;
-                    }
-                } catch (Exception e) {
-                    throw new NestableRuntimeException("find table [" + names.get(0) + "." + names.get(1) + "] error",
-                            e);
+        this.tables = MigrateMap.makeComputingMap(names -> {
+            Assert.isTrue(names.size() == 2);
+            try {
+                Table table = DdlUtils.findTable(jdbcTemplate, names.get(0), names.get(0), names.get(1));
+                if (table == null) {
+                    throw new NestableRuntimeException("no found table [" + names.get(0) + "." + names.get(1)
+                            + "] , pls check");
+                } else {
+                    return table;
                 }
+            } catch (Exception e) {
+                throw new NestableRuntimeException("find table [" + names.get(0) + "." + names.get(1) + "] error",
+                        e);
             }
         });
     }

@@ -48,6 +48,7 @@ public abstract class AbstractSqlTemplate implements SqlTemplate {
         return sql.toString().intern(); // 不使用intern，避免方法区内存消耗过多
     }
 
+    @Override
     public String getInsertSql(String schemaName, String tableName, String[] pkNames, String[] columnNames) {
         StringBuilder sql = new StringBuilder("insert into " + getFullName(schemaName, tableName) + "(");
         String[] allColumns = new String[pkNames.length + columnNames.length];

@@ -3,9 +3,9 @@ package com.alibaba.otter.canal.example.db.mysql;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.otter.canal.example.db.AbstractDbClient;
 import com.alibaba.otter.canal.example.db.dialect.DbDialect;
+import com.alibaba.otter.canal.example.db.dialect.SqlTemplate;
 import com.alibaba.otter.canal.example.db.dialect.mysql.MysqlDialect;
 import com.alibaba.otter.canal.example.db.dialect.mysql.MysqlSqlTemplate;
-import com.alibaba.otter.canal.example.db.dialect.SqlTemplate;
 import com.alibaba.otter.canal.example.db.utils.SqlUtils;
 import com.alibaba.otter.canal.protocol.CanalEntry;
 import com.alibaba.otter.canal.protocol.exception.CanalClientException;
@@ -13,12 +13,9 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.ddlutils.model.Column;
 import org.apache.ddlutils.model.Table;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.PreparedStatementSetter;
 import org.springframework.jdbc.core.StatementCreatorUtils;
 import org.springframework.jdbc.support.lob.DefaultLobHandler;
 import org.springframework.jdbc.support.lob.LobCreator;
-import org.springframework.transaction.TransactionStatus;
-import org.springframework.transaction.support.TransactionCallback;
 
 import javax.sql.DataSource;
 import java.sql.PreparedStatement;
@@ -35,26 +32,15 @@ public abstract class AbstractMysqlClient extends AbstractDbClient {
     private DataSource dataSource;
 
     private DbDialect dbDialect;
+
     private SqlTemplate sqlTemplate;
 
     protected Integer execute(final CanalEntry.Header header, final List<CanalEntry.Column> columns) {
         final String sql = getSql(header, columns);
-        final LobCreator lobCreator = dbDialect.getLobHandler().getLobCreator();
-        dbDialect.getTransactionTemplate().execute(new TransactionCallback() {
-
-            public Object doInTransaction(TransactionStatus status) {
-                try {
-                    JdbcTemplate template = dbDialect.getJdbcTemplate();
-                    int affect = template.update(sql, new PreparedStatementSetter() {
-
-                        public void setValues(PreparedStatement ps) throws SQLException {
-                            doPreparedStatement(ps, dbDialect, lobCreator, header, columns);
-                        }
-                    });
-                    return affect;
-                } finally {
-                    lobCreator.close();
-                }
+        dbDialect.getTransactionTemplate().execute(status -> {
+            try (LobCreator lobCreator = dbDialect.getLobHandler().getLobCreator()) {
+                JdbcTemplate template = dbDialect.getJdbcTemplate();
+                return template.update(sql, ps -> doPreparedStatement(ps, dbDialect, lobCreator, header, columns));
             }
         });
         return 0;
@@ -81,6 +67,9 @@ public abstract class AbstractMysqlClient extends AbstractDbClient {
                 break;
             case DELETE:
                 sql = sqlTemplate.getDeleteSql(header.getSchemaName(), header.getTableName(), pkNames.toArray(new String[]{}));
+                break;
+            default:
+                break;
         }
         logger.info("Execute sql: {}", sql);
         return sql;
@@ -110,11 +99,14 @@ public abstract class AbstractMysqlClient extends AbstractDbClient {
                 break;
             case DELETE:
                 rebuildColumns.addAll(keyColumns);
+                break;
+            default:
+                break;
         }
 
         // 获取一下当前字段名的数据是否必填
         Table table = dbDialect.findTable(header.getSchemaName(), header.getTableName());
-        Map<String, Boolean> isRequiredMap = new HashMap();
+        Map<String, Boolean> isRequiredMap = new HashMap<>();
         for (Column tableColumn : table.getColumns()) {
             isRequiredMap.put(StringUtils.lowerCase(tableColumn.getName()), tableColumn.isRequired());
         }

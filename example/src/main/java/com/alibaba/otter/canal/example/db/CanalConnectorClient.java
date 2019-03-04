@@ -57,31 +57,31 @@ public abstract class CanalConnectorClient extends AbstractCanalLifeCycle implem
         transactionFormat = sb.toString();
     }
 
-    private String zkServers;//cluster
-    private String address;//single，ip:port
+    //cluster
+    private String zkServers;
+    //single，ip:port
+    private String address;
     private String destination;
     private String username;
     private String password;
     private int batchSize = 5 * 1024;
-    private String filter = "";//同canal filter，用于过滤database或者table的相关数据。
-    protected boolean debug = false;//开启debug，会把每条消息的详情打印
+    //同canal filter，用于过滤database或者table的相关数据。
+    private String filter = "";
+    //开启debug，会把每条消息的详情打印
+    protected boolean debug = false;
 
     //1:retry，重试，重试默认为3次，由retryTimes参数决定，如果重试次数达到阈值，则跳过，并且记录日志。
     //2:ignore,直接忽略，不重试，记录日志。
     protected int exceptionStrategy = 1;
     protected int retryTimes = 3;
-    protected int waitingTime = 100;//当binlog没有数据时，主线程等待的时间，单位ms,大于0
+    //当binlog没有数据时，主线程等待的时间，单位ms,大于0
+    protected int waitingTime = 100;
 
 
     protected CanalConnector connector;
     protected Thread thread;
 
-    protected Thread.UncaughtExceptionHandler handler = new Thread.UncaughtExceptionHandler() {
-
-        public void uncaughtException(Thread t, Throwable e) {
-            logger.error("process message has an error", e);
-        }
-    };
+    protected Thread.UncaughtExceptionHandler handler = (t, e) -> logger.error("process message has an error", e);
 
     @Override
     public void afterPropertiesSet() {
@@ -102,12 +102,7 @@ public abstract class CanalConnectorClient extends AbstractCanalLifeCycle implem
         super.start();
         initConnector();
 
-        thread = new Thread(new Runnable() {
-
-            public void run() {
-                process();
-            }
-        });
+        thread = new Thread(() -> process());
 
         thread.setUncaughtExceptionHandler(handler);
         thread.start();
@@ -146,7 +141,9 @@ public abstract class CanalConnectorClient extends AbstractCanalLifeCycle implem
                 connector.connect();
                 connector.subscribe(filter);
                 connector.rollback();
-                times = 0;//reset;
+
+                //reset
+                times = 0;
 
                 while (running) {
                     // 获取指定数量的数据，不确认
@@ -209,7 +206,8 @@ public abstract class CanalConnectorClient extends AbstractCanalLifeCycle implem
             return;
         }
         try {
-            int sleepTime = 1000 + times * 100;//最大sleep 3s。
+            //最大sleep 3s。
+            int sleepTime = 1000 + times * 100;
             Thread.sleep(sleepTime);
         } catch (Exception ex) {
             //
@@ -240,7 +238,7 @@ public abstract class CanalConnectorClient extends AbstractCanalLifeCycle implem
         String endPosition = buildPosition(message.getEntries().get(size - 1));
 
         SimpleDateFormat format = new SimpleDateFormat(DATE_FORMAT);
-        logger.info(contextFormat, new Object[]{batchId, size, memSize, format.format(new Date()), startPosition, endPosition});
+        logger.info(contextFormat, batchId, size, memSize, format.format(new Date()), startPosition, endPosition);
     }
 
     protected String buildPosition(CanalEntry.Entry entry) {
@@ -274,11 +272,11 @@ public abstract class CanalConnectorClient extends AbstractCanalLifeCycle implem
             // 打印事务头信息，执行的线程id，事务耗时
             CanalEntry.Header header = entry.getHeader();
             long executeTime = header.getExecuteTime();
-            long delayTime = new Date().getTime() - executeTime;
+            long delayTime = System.currentTimeMillis() - executeTime;
             logger.info(transactionFormat,
-                    new Object[]{"begin", begin.getTransactionId(), header.getLogfileName(),
-                            String.valueOf(header.getLogfileOffset()),
-                            String.valueOf(header.getExecuteTime()), String.valueOf(delayTime)});
+                    "begin", begin.getTransactionId(), header.getLogfileName(),
+                    String.valueOf(header.getLogfileOffset()),
+                    String.valueOf(header.getExecuteTime()), String.valueOf(delayTime));
         } catch (Exception e) {
             logger.error("parse event has an error , data:" + entry.toString(), e);
         }
@@ -293,12 +291,12 @@ public abstract class CanalConnectorClient extends AbstractCanalLifeCycle implem
             // 打印事务提交信息，事务id
             CanalEntry.Header header = entry.getHeader();
             long executeTime = header.getExecuteTime();
-            long delayTime = new Date().getTime() - executeTime;
+            long delayTime = System.currentTimeMillis() - executeTime;
 
             logger.info(transactionFormat,
-                    new Object[]{"end", end.getTransactionId(), header.getLogfileName(),
-                            String.valueOf(header.getLogfileOffset()),
-                            String.valueOf(header.getExecuteTime()), String.valueOf(delayTime)});
+                    "end", end.getTransactionId(), header.getLogfileName(),
+                    String.valueOf(header.getLogfileOffset()),
+                    String.valueOf(header.getExecuteTime()), String.valueOf(delayTime));
         } catch (Exception e) {
             logger.error("parse event has an error , data:" + entry.toString(), e);
         }
@@ -379,7 +377,9 @@ public abstract class CanalConnectorClient extends AbstractCanalLifeCycle implem
     }
 
     public enum ExceptionStrategy {
-        RETRY(1), IGNORE(2);
+        RETRY(1),
+        IGNORE(2);
+
         public int code;
 
         ExceptionStrategy(int code) {

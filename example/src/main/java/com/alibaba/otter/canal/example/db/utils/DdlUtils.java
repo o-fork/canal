@@ -11,12 +11,14 @@ import org.apache.ddlutils.platform.DatabaseMetaDataWrapper;
 import org.apache.ddlutils.platform.MetaDataColumnDescriptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.JdbcUtils;
 
-import java.sql.*;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Types;
 import java.util.*;
 
 
@@ -27,72 +29,69 @@ public class DdlUtils {
     private final static Map<Integer, String> _defaultSizes = new HashMap<Integer, String>();
 
     static {
-        _defaultSizes.put(new Integer(1), "254");
-        _defaultSizes.put(new Integer(12), "254");
-        _defaultSizes.put(new Integer(-1), "254");
-        _defaultSizes.put(new Integer(-2), "254");
-        _defaultSizes.put(new Integer(-3), "254");
-        _defaultSizes.put(new Integer(-4), "254");
-        _defaultSizes.put(new Integer(4), "32");
-        _defaultSizes.put(new Integer(-5), "64");
-        _defaultSizes.put(new Integer(7), "7,0");
-        _defaultSizes.put(new Integer(6), "15,0");
-        _defaultSizes.put(new Integer(8), "15,0");
-        _defaultSizes.put(new Integer(3), "15,15");
-        _defaultSizes.put(new Integer(2), "15,15");
+        _defaultSizes.put(1, "254");
+        _defaultSizes.put(12, "254");
+        _defaultSizes.put(-1, "254");
+        _defaultSizes.put(-2, "254");
+        _defaultSizes.put(-3, "254");
+        _defaultSizes.put(-4, "254");
+        _defaultSizes.put(4, "32");
+        _defaultSizes.put(-5, "64");
+        _defaultSizes.put(7, "7,0");
+        _defaultSizes.put(6, "15,0");
+        _defaultSizes.put(8, "15,0");
+        _defaultSizes.put(3, "15,15");
+        _defaultSizes.put(2, "15,15");
     }
 
 
     public static Table findTable(final JdbcTemplate jdbcTemplate, final String catalogName, final String schemaName,
                                   final String tableName) {
-        return (Table) jdbcTemplate.execute(new ConnectionCallback() {
+        return jdbcTemplate.execute((ConnectionCallback<Table>) con -> {
+            Table table = null;
+            DatabaseMetaDataWrapper metaData = new DatabaseMetaDataWrapper();
+            try {
 
-            public Object doInConnection(Connection con) throws SQLException, DataAccessException {
-                Table table = null;
-                DatabaseMetaDataWrapper metaData = new DatabaseMetaDataWrapper();
-                try {
+                DatabaseMetaData databaseMetaData = con.getMetaData();
 
-                    DatabaseMetaData databaseMetaData = con.getMetaData();
+                metaData.setMetaData(databaseMetaData);
+                metaData.setTableTypes(TableType.toStrings(SUPPORTED_TABLE_TYPES));
+                metaData.setCatalog(catalogName);
+                metaData.setSchemaPattern(schemaName);
 
-                    metaData.setMetaData(databaseMetaData);
-                    metaData.setTableTypes(TableType.toStrings(SUPPORTED_TABLE_TYPES));
-                    metaData.setCatalog(catalogName);
-                    metaData.setSchemaPattern(schemaName);
-
-                    String convertTableName = tableName;
-                    if (databaseMetaData.storesUpperCaseIdentifiers()) {
-                        metaData.setCatalog(catalogName.toUpperCase());
-                        metaData.setSchemaPattern(schemaName.toUpperCase());
-                        convertTableName = tableName.toUpperCase();
-                    }
-                    if (databaseMetaData.storesLowerCaseIdentifiers()) {
-                        metaData.setCatalog(catalogName.toLowerCase());
-                        metaData.setSchemaPattern(schemaName.toLowerCase());
-                        convertTableName = tableName.toLowerCase();
-                    }
-
-                    ResultSet tableData = null;
-                    try {
-                        tableData = metaData.getTables(convertTableName);
-
-                        while ((tableData != null) && tableData.next()) {
-                            Map<String, Object> values = readColumns(tableData, initColumnsForTable());
-
-                            table = readTable(metaData, values);
-                            if (table.getName().equalsIgnoreCase(tableName)) {
-                                break;
-                            }
-                        }
-                    } finally {
-                        JdbcUtils.closeResultSet(tableData);
-                    }
-                } catch (Exception e) {
-                    logger.error(e.getMessage(), e);
+                String convertTableName = tableName;
+                if (databaseMetaData.storesUpperCaseIdentifiers()) {
+                    metaData.setCatalog(catalogName.toUpperCase());
+                    metaData.setSchemaPattern(schemaName.toUpperCase());
+                    convertTableName = tableName.toUpperCase();
+                }
+                if (databaseMetaData.storesLowerCaseIdentifiers()) {
+                    metaData.setCatalog(catalogName.toLowerCase());
+                    metaData.setSchemaPattern(schemaName.toLowerCase());
+                    convertTableName = tableName.toLowerCase();
                 }
 
-                makeAllColumnsPrimaryKeysIfNoPrimaryKeysFound(table);
-                return table;
+                ResultSet tableData = null;
+                try {
+                    tableData = metaData.getTables(convertTableName);
+
+                    while ((tableData != null) && tableData.next()) {
+                        Map<String, Object> values = readColumns(tableData, initColumnsForTable());
+
+                        table = readTable(metaData, values);
+                        if (table.getName().equalsIgnoreCase(tableName)) {
+                            break;
+                        }
+                    }
+                } finally {
+                    JdbcUtils.closeResultSet(tableData);
+                }
+            } catch (Exception e) {
+                logger.error(e.getMessage(), e);
             }
+
+            makeAllColumnsPrimaryKeysIfNoPrimaryKeysFound(table);
+            return table;
         });
     }
 
@@ -224,7 +223,7 @@ public class DdlUtils {
 
         column.setName((String) values.get("COLUMN_NAME"));
         column.setDefaultValue((String) values.get("COLUMN_DEF"));
-        column.setTypeCode(((Integer) values.get("DATA_TYPE")).intValue());
+        column.setTypeCode((Integer) values.get("DATA_TYPE"));
 
         String typeName = (String) values.get("TYPE_NAME");
         // column.setType(typeName);

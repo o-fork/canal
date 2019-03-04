@@ -39,7 +39,8 @@ public abstract class AbstractDbClient extends CanalConnectorClient {
         long batchId = message.getId();
         //遍历每条消息
         for (CanalEntry.Entry entry : message.getEntries()) {
-            session(entry);//no exception
+            // no exception
+            session(entry);
         }
         //ack all the time。
         connector.ack(batchId);
@@ -91,7 +92,7 @@ public abstract class AbstractDbClient extends CanalConnectorClient {
         CanalEntry.EventType eventType = rowChange.getEventType();
         CanalEntry.Header header = entry.getHeader();
         long executeTime = header.getExecuteTime();
-        long delayTime = new Date().getTime() - executeTime;
+        long delayTime = System.currentTimeMillis() - executeTime;
         String sql = rowChange.getSql();
 
         try {
@@ -104,9 +105,9 @@ public abstract class AbstractDbClient extends CanalConnectorClient {
         } catch (Exception e) {
             logger.error("process event error ,", e);
             logger.error(rowFormat,
-                    new Object[]{header.getLogfileName(), String.valueOf(header.getLogfileOffset()),
-                            header.getSchemaName(), header.getTableName(), eventType,
-                            String.valueOf(executeTime), String.valueOf(delayTime)});
+                    header.getLogfileName(), String.valueOf(header.getLogfileOffset()),
+                    header.getSchemaName(), header.getTableName(), eventType,
+                    String.valueOf(executeTime), String.valueOf(delayTime));
             throw e;//重新抛出
         }
     }

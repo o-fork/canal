@@ -28,6 +28,7 @@ public class MysqlSqlTemplate extends AbstractSqlTemplate {
 
     private static final String ESCAPE = "`";
 
+    @Override
     public String getMergeSql(String schemaName, String tableName, String[] pkNames, String[] columnNames,
                               String[] viewColumnNames, boolean includePks) {
         StringBuilder sql = new StringBuilder("insert into " + getFullName(schemaName, tableName) + "(");
@@ -77,6 +78,7 @@ public class MysqlSqlTemplate extends AbstractSqlTemplate {
         return sql.toString().intern();// intern优化，避免出现大量相同的字符串
     }
 
+    @Override
     protected String appendEscape(String columnName) {
         return ESCAPE + columnName + ESCAPE;
     }
