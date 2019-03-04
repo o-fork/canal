@@ -1,22 +1,5 @@
 package com.alibaba.otter.canal.client.impl;
 
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.SocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.channels.Channel;
-import java.nio.channels.Channels;
-import java.nio.channels.ReadableByteChannel;
-import java.nio.channels.SocketChannel;
-import java.nio.channels.WritableByteChannel;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.alibaba.otter.canal.client.CanalConnector;
 import com.alibaba.otter.canal.client.CanalMessageDeserializer;
 import com.alibaba.otter.canal.client.impl.running.ClientRunningData;
@@ -25,21 +8,23 @@ import com.alibaba.otter.canal.client.impl.running.ClientRunningMonitor;
 import com.alibaba.otter.canal.common.utils.AddressUtils;
 import com.alibaba.otter.canal.common.utils.BooleanMutex;
 import com.alibaba.otter.canal.common.zookeeper.ZkClientx;
-import com.alibaba.otter.canal.protocol.CanalPacket.Ack;
-import com.alibaba.otter.canal.protocol.CanalPacket.ClientAck;
-import com.alibaba.otter.canal.protocol.CanalPacket.ClientAuth;
-import com.alibaba.otter.canal.protocol.CanalPacket.ClientRollback;
-import com.alibaba.otter.canal.protocol.CanalPacket.Compression;
-import com.alibaba.otter.canal.protocol.CanalPacket.Get;
-import com.alibaba.otter.canal.protocol.CanalPacket.Handshake;
-import com.alibaba.otter.canal.protocol.CanalPacket.Packet;
-import com.alibaba.otter.canal.protocol.CanalPacket.PacketType;
-import com.alibaba.otter.canal.protocol.CanalPacket.Sub;
-import com.alibaba.otter.canal.protocol.CanalPacket.Unsub;
+import com.alibaba.otter.canal.protocol.CanalPacket.*;
 import com.alibaba.otter.canal.protocol.ClientIdentity;
 import com.alibaba.otter.canal.protocol.Message;
 import com.alibaba.otter.canal.protocol.exception.CanalClientException;
 import com.google.protobuf.ByteString;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.channels.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 基于{@linkplain CanalServerWithNetty}定义的网络协议接口，对于canal数据进行get/rollback/ack等操作
@@ -49,45 +34,43 @@ import com.google.protobuf.ByteString;
  */
 public class SimpleCanalConnector implements CanalConnector {
 
-    private static final Logger  logger                = LoggerFactory.getLogger(SimpleCanalConnector.class);
-    private SocketAddress        address;
-    private String               username;
-    private String               password;
-    private int                  soTimeout             = 60000;                                              // milliseconds
-    private int                  idleTimeout           = 60 * 60 * 1000;                                     // client和server之间的空闲链接超时的时间,默认为1小时
-    private String               filter;                                                                     // 记录上一次的filter提交值,便于自动重试时提交
+    private static final Logger logger = LoggerFactory.getLogger(SimpleCanalConnector.class);
+    private SocketAddress address;
+    private String username;
+    private String password;
+    private int soTimeout = 60000;                                              // milliseconds
+    private int idleTimeout = 60 * 60 * 1000;                                     // client和server之间的空闲链接超时的时间,默认为1小时
+    private String filter;                                                                     // 记录上一次的filter提交值,便于自动重试时提交
 
-    private final ByteBuffer     readHeader            = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN);
-    private final ByteBuffer     writeHeader           = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN);
-    private SocketChannel        channel;
-    private ReadableByteChannel  readableChannel;
-    private WritableByteChannel  writableChannel;
-    private List<Compression>    supportedCompressions = new ArrayList<Compression>();
-    private ClientIdentity       clientIdentity;
+    private final ByteBuffer readHeader = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN);
+    private final ByteBuffer writeHeader = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN);
+    private SocketChannel channel;
+    private ReadableByteChannel readableChannel;
+    private WritableByteChannel writableChannel;
+    private List<Compression> supportedCompressions = new ArrayList<>();
+    private ClientIdentity clientIdentity;
     private ClientRunningMonitor runningMonitor;                                                             // 运行控制
-    private ZkClientx            zkClientx;
-    private BooleanMutex         mutex                 = new BooleanMutex(false);
-    private volatile boolean     connected             = false;                                              // 代表connected是否已正常执行，因为有HA，不代表在工作中
-    private boolean              rollbackOnConnect     = true;                                               // 是否在connect链接成功后，自动执行rollback操作
-    private boolean              rollbackOnDisConnect  = false;                                              // 是否在connect链接成功后，自动执行rollback操作
-    private boolean              lazyParseEntry        = false;                                              // 是否自动化解析Entry对象,如果考虑最大化性能可以延后解析
+    private ZkClientx zkClientx;
+    private BooleanMutex mutex = new BooleanMutex(false);
+    private volatile boolean connected = false;                                              // 代表connected是否已正常执行，因为有HA，不代表在工作中
+    private boolean rollbackOnConnect = true;                                               // 是否在connect链接成功后，自动执行rollback操作
+    private boolean rollbackOnDisConnect = false;                                              // 是否在connect链接成功后，自动执行rollback操作
+    private boolean lazyParseEntry = false;                                              // 是否自动化解析Entry对象,如果考虑最大化性能可以延后解析
     // 读写数据分别使用不同的锁进行控制，减小锁粒度,读也需要排他锁，并发度容易造成数据包混乱，反序列化失败
-    private Object               readDataLock          = new Object();
-    private Object               writeDataLock         = new Object();
+    private Object readDataLock = new Object();
+    private Object writeDataLock = new Object();
 
-    private volatile boolean     running               = false;
+    private volatile boolean running = false;
 
-    public SimpleCanalConnector(SocketAddress address, String username, String password, String destination){
+    public SimpleCanalConnector(SocketAddress address, String username, String password, String destination) {
         this(address, username, password, destination, 60000, 60 * 60 * 1000);
     }
 
-    public SimpleCanalConnector(SocketAddress address, String username, String password, String destination,
-                                int soTimeout){
+    public SimpleCanalConnector(SocketAddress address, String username, String password, String destination, int soTimeout) {
         this(address, username, password, destination, soTimeout, 60 * 60 * 1000);
     }
 
-    public SimpleCanalConnector(SocketAddress address, String username, String password, String destination,
-                                int soTimeout, int idleTimeout){
+    public SimpleCanalConnector(SocketAddress address, String username, String password, String destination, int soTimeout, int idleTimeout) {
         this.address = address;
         this.username = username;
         this.password = password;
@@ -96,6 +79,7 @@ public class SimpleCanalConnector implements CanalConnector {
         this.clientIdentity = new ClientIdentity(destination, (short) 1001);
     }
 
+    @Override
     public void connect() throws CanalClientException {
         if (connected) {
             return;
@@ -111,7 +95,8 @@ public class SimpleCanalConnector implements CanalConnector {
                 return;
             }
             doConnect();
-            if (filter != null) { // 如果存在条件，说明是自动切换，基于上一次的条件订阅一次
+            // 如果存在条件，说明是自动切换，基于上一次的条件订阅一次
+            if (filter != null) {
                 subscribe(filter);
             }
             if (rollbackOnConnect) {
@@ -122,6 +107,7 @@ public class SimpleCanalConnector implements CanalConnector {
         connected = true;
     }
 
+    @Override
     public void disconnect() throws CanalClientException {
         if (rollbackOnDisConnect && channel.isConnected()) {
             rollback();
@@ -161,16 +147,16 @@ public class SimpleCanalConnector implements CanalConnector {
             supportedCompressions.add(handshake.getSupportedCompressions());
             //
             ClientAuth ca = ClientAuth.newBuilder()
-                .setUsername(username != null ? username : "")
-                .setPassword(ByteString.copyFromUtf8(password != null ? password : ""))
-                .setNetReadTimeout(idleTimeout)
-                .setNetWriteTimeout(idleTimeout)
-                .build();
+                    .setUsername(username != null ? username : "")
+                    .setPassword(ByteString.copyFromUtf8(password != null ? password : ""))
+                    .setNetReadTimeout(idleTimeout)
+                    .setNetWriteTimeout(idleTimeout)
+                    .build();
             writeWithHeader(Packet.newBuilder()
-                .setType(PacketType.CLIENTAUTHENTICATION)
-                .setBody(ca.toByteString())
-                .build()
-                .toByteArray());
+                    .setType(PacketType.CLIENTAUTHENTICATION)
+                    .setBody(ca.toByteString())
+                    .build()
+                    .toByteArray());
             //
             Packet ack = Packet.parseFrom(readNextPacket());
             if (ack.getType() != PacketType.ACK) {
@@ -180,7 +166,7 @@ public class SimpleCanalConnector implements CanalConnector {
             Ack ackBody = Ack.parseFrom(ack.getBody());
             if (ackBody.getErrorCode() > 0) {
                 throw new CanalClientException("something goes wrong when doing authentication: "
-                                               + ackBody.getErrorMessage());
+                        + ackBody.getErrorMessage());
             }
 
             connected = true;
@@ -213,10 +199,13 @@ public class SimpleCanalConnector implements CanalConnector {
         }
     }
 
+    @Override
     public void subscribe() throws CanalClientException {
-        subscribe(""); // 传递空字符即可
+        // 传递空字符即可
+        subscribe("");
     }
 
+    @Override
     public void subscribe(String filter) throws CanalClientException {
         waitClientRunning();
         if (!running) {
@@ -224,15 +213,15 @@ public class SimpleCanalConnector implements CanalConnector {
         }
         try {
             writeWithHeader(Packet.newBuilder()
-                .setType(PacketType.SUBSCRIPTION)
-                .setBody(Sub.newBuilder()
-                    .setDestination(clientIdentity.getDestination())
-                    .setClientId(String.valueOf(clientIdentity.getClientId()))
-                    .setFilter(filter != null ? filter : "")
+                    .setType(PacketType.SUBSCRIPTION)
+                    .setBody(Sub.newBuilder()
+                            .setDestination(clientIdentity.getDestination())
+                            .setClientId(String.valueOf(clientIdentity.getClientId()))
+                            .setFilter(filter != null ? filter : "")
+                            .build()
+                            .toByteString())
                     .build()
-                    .toByteString())
-                .build()
-                .toByteArray());
+                    .toByteArray());
             //
             Packet p = Packet.parseFrom(readNextPacket());
             Ack ack = Ack.parseFrom(p.getBody());
@@ -246,6 +235,7 @@ public class SimpleCanalConnector implements CanalConnector {
         }
     }
 
+    @Override
     public void unsubscribe() throws CanalClientException {
         waitClientRunning();
         if (!running) {
@@ -253,14 +243,14 @@ public class SimpleCanalConnector implements CanalConnector {
         }
         try {
             writeWithHeader(Packet.newBuilder()
-                .setType(PacketType.UNSUBSCRIPTION)
-                .setBody(Unsub.newBuilder()
-                    .setDestination(clientIdentity.getDestination())
-                    .setClientId(String.valueOf(clientIdentity.getClientId()))
+                    .setType(PacketType.UNSUBSCRIPTION)
+                    .setBody(Unsub.newBuilder()
+                            .setDestination(clientIdentity.getDestination())
+                            .setClientId(String.valueOf(clientIdentity.getClientId()))
+                            .build()
+                            .toByteString())
                     .build()
-                    .toByteString())
-                .build()
-                .toByteArray());
+                    .toByteArray());
             //
             Packet p = Packet.parseFrom(readNextPacket());
             Ack ack = Ack.parseFrom(p.getBody());
@@ -272,20 +262,24 @@ public class SimpleCanalConnector implements CanalConnector {
         }
     }
 
+    @Override
     public Message get(int batchSize) throws CanalClientException {
         return get(batchSize, null, null);
     }
 
+    @Override
     public Message get(int batchSize, Long timeout, TimeUnit unit) throws CanalClientException {
         Message message = getWithoutAck(batchSize, timeout, unit);
         ack(message.getId());
         return message;
     }
 
+    @Override
     public Message getWithoutAck(int batchSize) throws CanalClientException {
         return getWithoutAck(batchSize, null, null);
     }
 
+    @Override
     public Message getWithoutAck(int batchSize, Long timeout, TimeUnit unit) throws CanalClientException {
         waitClientRunning();
         if (!running) {
@@ -293,24 +287,25 @@ public class SimpleCanalConnector implements CanalConnector {
         }
         try {
             int size = (batchSize <= 0) ? 1000 : batchSize;
-            long time = (timeout == null || timeout < 0) ? -1 : timeout; // -1代表不做timeout控制
+            // -1代表不做timeout控制
+            long time = (timeout == null || timeout < 0) ? -1 : timeout;
             if (unit == null) {
                 unit = TimeUnit.MILLISECONDS;
             }
 
             writeWithHeader(Packet.newBuilder()
-                .setType(PacketType.GET)
-                .setBody(Get.newBuilder()
-                    .setAutoAck(false)
-                    .setDestination(clientIdentity.getDestination())
-                    .setClientId(String.valueOf(clientIdentity.getClientId()))
-                    .setFetchSize(size)
-                    .setTimeout(time)
-                    .setUnit(unit.ordinal())
+                    .setType(PacketType.GET)
+                    .setBody(Get.newBuilder()
+                            .setAutoAck(false)
+                            .setDestination(clientIdentity.getDestination())
+                            .setClientId(String.valueOf(clientIdentity.getClientId()))
+                            .setFetchSize(size)
+                            .setTimeout(time)
+                            .setUnit(unit.ordinal())
+                            .build()
+                            .toByteString())
                     .build()
-                    .toByteString())
-                .build()
-                .toByteArray());
+                    .toByteArray());
             return receiveMessages();
         } catch (IOException e) {
             throw new CanalClientException(e);
@@ -322,48 +317,52 @@ public class SimpleCanalConnector implements CanalConnector {
         return CanalMessageDeserializer.deserializer(data, lazyParseEntry);
     }
 
+    @Override
     public void ack(long batchId) throws CanalClientException {
         waitClientRunning();
         if (!running) {
             return;
         }
         ClientAck ca = ClientAck.newBuilder()
-            .setDestination(clientIdentity.getDestination())
-            .setClientId(String.valueOf(clientIdentity.getClientId()))
-            .setBatchId(batchId)
-            .build();
+                .setDestination(clientIdentity.getDestination())
+                .setClientId(String.valueOf(clientIdentity.getClientId()))
+                .setBatchId(batchId)
+                .build();
         try {
             writeWithHeader(Packet.newBuilder()
-                .setType(PacketType.CLIENTACK)
-                .setBody(ca.toByteString())
-                .build()
-                .toByteArray());
+                    .setType(PacketType.CLIENTACK)
+                    .setBody(ca.toByteString())
+                    .build()
+                    .toByteArray());
         } catch (IOException e) {
             throw new CanalClientException(e);
         }
     }
 
+    @Override
     public void rollback(long batchId) throws CanalClientException {
         waitClientRunning();
         ClientRollback ca = ClientRollback.newBuilder()
-            .setDestination(clientIdentity.getDestination())
-            .setClientId(String.valueOf(clientIdentity.getClientId()))
-            .setBatchId(batchId)
-            .build();
+                .setDestination(clientIdentity.getDestination())
+                .setClientId(String.valueOf(clientIdentity.getClientId()))
+                .setBatchId(batchId)
+                .build();
         try {
             writeWithHeader(Packet.newBuilder()
-                .setType(PacketType.CLIENTROLLBACK)
-                .setBody(ca.toByteString())
-                .build()
-                .toByteArray());
+                    .setType(PacketType.CLIENTROLLBACK)
+                    .setBody(ca.toByteString())
+                    .build()
+                    .toByteArray());
         } catch (IOException e) {
             throw new CanalClientException(e);
         }
     }
 
+    @Override
     public void rollback() throws CanalClientException {
         waitClientRunning();
-        rollback(0);// 0代笔未设置
+        // 0代笔未设置
+        rollback(0);
     }
 
     // ==================== helper method ====================
@@ -418,10 +417,12 @@ public class SimpleCanalConnector implements CanalConnector {
             runningMonitor.setClientData(clientData);
             runningMonitor.setListener(new ClientRunningListener() {
 
+                @Override
                 public InetSocketAddress processActiveEnter() {
                     InetSocketAddress address = doConnect();
                     mutex.set(true);
-                    if (filter != null) { // 如果存在条件，说明是自动切换，基于上一次的条件订阅一次
+                    // 如果存在条件，说明是自动切换，基于上一次的条件订阅一次
+                    if (filter != null) {
                         subscribe(filter);
                     }
 
@@ -432,6 +433,7 @@ public class SimpleCanalConnector implements CanalConnector {
                     return address;
                 }
 
+                @Override
                 public void processActiveExit() {
                     mutex.set(false);
                     doDisconnect();
@@ -444,7 +446,8 @@ public class SimpleCanalConnector implements CanalConnector {
     private void waitClientRunning() {
         try {
             if (zkClientx != null) {
-                if (!connected) {// 未调用connect
+                // 未调用connect
+                if (!connected) {
                     throw new CanalClientException("should connect first");
                 }
 
@@ -460,6 +463,7 @@ public class SimpleCanalConnector implements CanalConnector {
         }
     }
 
+    @Override
     public boolean checkValid() {
         if (zkClientx != null) {
             return mutex.state();

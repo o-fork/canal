@@ -1,10 +1,15 @@
 package com.alibaba.otter.canal.client.rocketmq;
 
-import java.util.List;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
-
+import com.alibaba.fastjson.JSON;
+import com.alibaba.otter.canal.client.CanalMQConnector;
+import com.alibaba.otter.canal.client.CanalMessageDeserializer;
+import com.alibaba.otter.canal.client.impl.SimpleCanalConnector;
+import com.alibaba.otter.canal.protocol.FlatMessage;
+import com.alibaba.otter.canal.protocol.Message;
+import com.alibaba.otter.canal.protocol.exception.CanalClientException;
+import com.aliyun.openservices.apache.api.impl.authority.SessionCredentials;
+import com.aliyun.openservices.apache.api.impl.rocketmq.ClientRPCHook;
+import com.google.common.collect.Lists;
 import org.apache.commons.lang.StringUtils;
 import org.apache.rocketmq.client.consumer.DefaultMQPushConsumer;
 import org.apache.rocketmq.client.consumer.listener.ConsumeOrderlyContext;
@@ -17,46 +22,39 @@ import org.apache.rocketmq.remoting.RPCHook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.alibaba.fastjson.JSON;
-import com.alibaba.otter.canal.client.CanalMQConnector;
-import com.alibaba.otter.canal.client.CanalMessageDeserializer;
-import com.alibaba.otter.canal.client.impl.SimpleCanalConnector;
-import com.alibaba.otter.canal.protocol.FlatMessage;
-import com.alibaba.otter.canal.protocol.Message;
-import com.alibaba.otter.canal.protocol.exception.CanalClientException;
-import com.aliyun.openservices.apache.api.impl.authority.SessionCredentials;
-import com.aliyun.openservices.apache.api.impl.rocketmq.ClientRPCHook;
-import com.google.common.collect.Lists;
+import java.util.List;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 /**
  * RocketMQ的连接
- * 
+ *
  * <pre>
  * 注意点:
  * 1. 相比于canal {@linkplain SimpleCanalConnector}, 这里get和ack操作不能有并发, 必须是一个线程执行get后，内存里执行完毕ack后再取下一个get
  * </pre>
- * 
+ *
  * @since 1.1.1
  */
 public class RocketMQCanalConnector implements CanalMQConnector {
 
-    private static final Logger                 logger              = LoggerFactory.getLogger(RocketMQCanalConnector.class);
+    private static final Logger logger = LoggerFactory.getLogger(RocketMQCanalConnector.class);
 
-    private String                              nameServer;
-    private String                              topic;
-    private String                              groupName;
-    private volatile boolean                    connected           = false;
-    private DefaultMQPushConsumer               rocketMQConsumer;
+    private String nameServer;
+    private String topic;
+    private String groupName;
+    private volatile boolean connected = false;
+    private DefaultMQPushConsumer rocketMQConsumer;
     private BlockingQueue<ConsumerBatchMessage> messageBlockingQueue;
-    private int                                 batchSize           = -1;
-    private long                                batchProcessTimeout = 60 * 1000;
-    private boolean                             flatMessage;
-    private volatile ConsumerBatchMessage       lastGetBatchMessage = null;
-    private String                              accessKey;
-    private String                              secretKey;
+    private int batchSize = -1;
+    private long batchProcessTimeout = 60 * 1000;
+    private boolean flatMessage;
+    private volatile ConsumerBatchMessage lastGetBatchMessage = null;
+    private String accessKey;
+    private String secretKey;
 
-    public RocketMQCanalConnector(String nameServer, String topic, String groupName, Integer batchSize,
-                                  boolean flatMessage){
+    public RocketMQCanalConnector(String nameServer, String topic, String groupName, Integer batchSize, boolean flatMessage) {
         this.nameServer = nameServer;
         this.topic = topic;
         this.groupName = groupName;
@@ -65,13 +63,13 @@ public class RocketMQCanalConnector implements CanalMQConnector {
         this.batchSize = batchSize;
     }
 
-    public RocketMQCanalConnector(String nameServer, String topic, String groupName, String accessKey,
-                                  String secretKey, Integer batchSize, boolean flatMessage){
+    public RocketMQCanalConnector(String nameServer, String topic, String groupName, String accessKey, String secretKey, Integer batchSize, boolean flatMessage) {
         this(nameServer, topic, groupName, batchSize, flatMessage);
         this.accessKey = accessKey;
         this.secretKey = secretKey;
     }
 
+    @Override
     public void connect() throws CanalClientException {
 
         RPCHook rpcHook = null;
@@ -91,15 +89,18 @@ public class RocketMQCanalConnector implements CanalMQConnector {
         }
     }
 
+    @Override
     public void disconnect() throws CanalClientException {
         rocketMQConsumer.shutdown();
         connected = false;
     }
 
+    @Override
     public boolean checkValid() throws CanalClientException {
         return connected;
     }
 
+    @Override
     public synchronized void subscribe(String filter) throws CanalClientException {
         if (connected) {
             return;
@@ -109,17 +110,13 @@ public class RocketMQCanalConnector implements CanalMQConnector {
                 this.connect();
             }
             rocketMQConsumer.subscribe(this.topic, "*");
-            rocketMQConsumer.registerMessageListener(new MessageListenerOrderly() {
-
-                @Override
-                public ConsumeOrderlyStatus consumeMessage(List<MessageExt> messageExts, ConsumeOrderlyContext context) {
-                    context.setAutoCommit(true);
-                    boolean isSuccess = process(messageExts);
-                    if (isSuccess) {
-                        return ConsumeOrderlyStatus.SUCCESS;
-                    } else {
-                        return ConsumeOrderlyStatus.SUSPEND_CURRENT_QUEUE_A_MOMENT;
-                    }
+            rocketMQConsumer.registerMessageListener((MessageListenerOrderly) (messageExts, context) -> {
+                context.setAutoCommit(true);
+                boolean isSuccess = process(messageExts);
+                if (isSuccess) {
+                    return ConsumeOrderlyStatus.SUCCESS;
+                } else {
+                    return ConsumeOrderlyStatus.SUSPEND_CURRENT_QUEUE_A_MOMENT;
                 }
             });
             rocketMQConsumer.start();
@@ -175,10 +172,12 @@ public class RocketMQCanalConnector implements CanalMQConnector {
         return isCompleted && isSuccess;
     }
 
+    @Override
     public void subscribe() throws CanalClientException {
         this.subscribe(null);
     }
 
+    @Override
     public void unsubscribe() throws CanalClientException {
         this.rocketMQConsumer.unsubscribe(this.topic);
     }
@@ -265,6 +264,7 @@ public class RocketMQCanalConnector implements CanalMQConnector {
         }
     }
 
+    @Override
     public Message get(int batchSize) throws CanalClientException {
         throw new CanalClientException("mq not support this method");
     }

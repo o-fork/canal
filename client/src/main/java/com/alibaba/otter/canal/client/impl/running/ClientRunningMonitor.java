@@ -47,6 +47,7 @@ public class ClientRunningMonitor extends AbstractCanalLifeCycle {
     public ClientRunningMonitor(){
         dataListener = new IZkDataListener() {
 
+            @Override
             public void handleDataChange(String dataPath, Object data) throws Exception {
                 MDC.put("destination", destination);
                 ClientRunningData runningData = JsonUtils.unmarshalFromByte((byte[]) data, ClientRunningData.class);
@@ -62,6 +63,7 @@ public class ClientRunningMonitor extends AbstractCanalLifeCycle {
                 activeData = (ClientRunningData) runningData;
             }
 
+            @Override
             public void handleDataDeleted(String dataPath) throws Exception {
                 MDC.put("destination", destination);
                 mutex.set(false);
@@ -85,6 +87,7 @@ public class ClientRunningMonitor extends AbstractCanalLifeCycle {
 
     }
 
+    @Override
     public void start() {
         super.start();
 
@@ -93,6 +96,7 @@ public class ClientRunningMonitor extends AbstractCanalLifeCycle {
         initRunning();
     }
 
+    @Override
     public void stop() {
         super.stop();
 

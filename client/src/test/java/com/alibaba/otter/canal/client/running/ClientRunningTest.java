@@ -124,6 +124,7 @@ public class ClientRunningTest extends AbstractZkTest {
                 return new InetSocketAddress(AddressUtils.getHostIp(), port);
             }
 
+            @Override
             public void processActiveExit() {
                 countLatch.countDown();
                 System.out.println(String.format("clientId:%s port:%s has stop", clientId, port));
