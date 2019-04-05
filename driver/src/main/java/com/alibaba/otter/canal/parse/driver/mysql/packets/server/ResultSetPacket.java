@@ -6,9 +6,9 @@ import java.util.List;
 
 public class ResultSetPacket {
 
-    private SocketAddress     sourceAddress;
+    private SocketAddress sourceAddress;
     private List<FieldPacket> fieldDescriptors = new ArrayList<FieldPacket>();
-    private List<String>      fieldValues      = new ArrayList<String>();
+    private List<String> fieldValues = new ArrayList<String>();
 
     public void setFieldDescriptors(List<FieldPacket> fieldDescriptors) {
         this.fieldDescriptors = fieldDescriptors;
@@ -34,9 +34,13 @@ public class ResultSetPacket {
         return sourceAddress;
     }
 
+    @Override
     public String toString() {
-        return "ResultSetPacket [fieldDescriptors=" + fieldDescriptors + ", fieldValues=" + fieldValues
-               + ", sourceAddress=" + sourceAddress + "]";
+        return "ResultSetPacket ["
+                + "fieldDescriptors=" + fieldDescriptors
+                + ", fieldValues=" + fieldValues
+                + ", sourceAddress=" + sourceAddress
+                + "]";
     }
 
 }

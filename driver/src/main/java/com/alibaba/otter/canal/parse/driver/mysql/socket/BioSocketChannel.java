@@ -17,18 +17,19 @@ import java.nio.channels.ClosedByInterruptException;
  */
 public class BioSocketChannel implements SocketChannel {
 
-    static final int     DEFAULT_CONNECT_TIMEOUT = 10 * 1000;
-    static final int     SO_TIMEOUT              = 1000;
-    private Socket       socket;
-    private InputStream  input;
+    static final int DEFAULT_CONNECT_TIMEOUT = 10 * 1000;
+    static final int SO_TIMEOUT = 1000;
+    private Socket socket;
+    private InputStream input;
     private OutputStream output;
 
-    BioSocketChannel(Socket socket) throws IOException{
+    BioSocketChannel(Socket socket) throws IOException {
         this.socket = socket;
         this.input = new BufferedInputStream(socket.getInputStream(), 16384);
         this.output = socket.getOutputStream();
     }
 
+    @Override
     public void write(byte[]... buf) throws IOException {
         OutputStream output = this.output;
         if (output != null) {
@@ -40,6 +41,7 @@ public class BioSocketChannel implements SocketChannel {
         }
     }
 
+    @Override
     public byte[] read(int readSize) throws IOException {
         InputStream input = this.input;
         byte[] data = new byte[readSize];
@@ -64,6 +66,7 @@ public class BioSocketChannel implements SocketChannel {
         return data;
     }
 
+    @Override
     public byte[] read(int readSize, int timeout) throws IOException {
         InputStream input = this.input;
         byte[] data = new byte[readSize];
@@ -89,8 +92,8 @@ public class BioSocketChannel implements SocketChannel {
         }
         if (remain > 0 && accTimeout >= timeout) {
             throw new SocketTimeoutException("Timeout occurred, failed to read total " + readSize + " bytes in "
-                                             + timeout + " milliseconds, actual read only " + (readSize - remain)
-                                             + " bytes");
+                    + timeout + " milliseconds, actual read only " + (readSize - remain)
+                    + " bytes");
         }
         return data;
     }
@@ -122,10 +125,11 @@ public class BioSocketChannel implements SocketChannel {
 
         if (n < len && accTimeout >= timeout) {
             throw new SocketTimeoutException("Timeout occurred, failed to read total " + len + " bytes in " + timeout
-                                             + " milliseconds, actual read only " + n + " bytes");
+                    + " milliseconds, actual read only " + n + " bytes");
         }
     }
 
+    @Override
     public boolean isConnected() {
         Socket socket = this.socket;
         if (socket != null) {
@@ -134,6 +138,7 @@ public class BioSocketChannel implements SocketChannel {
         return false;
     }
 
+    @Override
     public SocketAddress getRemoteSocketAddress() {
         Socket socket = this.socket;
         if (socket != null) {
@@ -143,6 +148,7 @@ public class BioSocketChannel implements SocketChannel {
         return null;
     }
 
+    @Override
     public SocketAddress getLocalSocketAddress() {
         Socket socket = this.socket;
         if (socket != null) {
@@ -152,6 +158,7 @@ public class BioSocketChannel implements SocketChannel {
         return null;
     }
 
+    @Override
     public void close() {
         Socket socket = this.socket;
         if (socket != null) {

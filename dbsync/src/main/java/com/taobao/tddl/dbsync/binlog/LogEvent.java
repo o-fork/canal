@@ -370,7 +370,8 @@ public abstract class LogEvent {
             case PARTIAL_UPDATE_ROWS_EVENT:
                 return "Update_rows_partial";
             default:
-                return "Unknown"; /* impossible */
+                /* impossible */
+                return "Unknown";
         }
     }
 

@@ -40,6 +40,7 @@ public class ClientAuthenticationPacket extends PacketWithHeaderPacket {
      * 
      * @throws IOException
      */
+    @Override
     public byte[] toBytes() throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         // 1. write client_flags

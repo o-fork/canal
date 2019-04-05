@@ -109,6 +109,7 @@ public class OKPacket extends PacketWithHeaderPacket {
         this.message = message;
     }
 
+    @Override
     public String toString() {
         return "OKPacket [affectedRows=" + Arrays.toString(affectedRows) + ", fieldCount=" + fieldCount + ", insertId="
                + Arrays.toString(insertId) + ", message=" + message + ", serverStatus=" + serverStatus

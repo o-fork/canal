@@ -53,21 +53,17 @@ public class CanalStater {
         controller = new CanalController(properties);
         controller.start();
         logger.info("## the canal server is running now ......");
-        shutdownThread = new Thread() {
-
-            public void run() {
-                try {
-                    logger.info("## stop the canal server");
-                    controller.stop();
-                    CanalLauncher.running = false;
-                } catch (Throwable e) {
-                    logger.warn("##something goes wrong when stopping canal Server:", e);
-                } finally {
-                    logger.info("## canal server is down.");
-                }
+        shutdownThread = new Thread(() -> {
+            try {
+                logger.info("## stop the canal server");
+                controller.stop();
+                CanalLauncher.running = false;
+            } catch (Throwable e) {
+                logger.warn("##something goes wrong when stopping canal Server:", e);
+            } finally {
+                logger.info("## canal server is down.");
             }
-
-        };
+        });
         Runtime.getRuntime().addShutdownHook(shutdownThread);
 
         if (canalMQProducer != null) {

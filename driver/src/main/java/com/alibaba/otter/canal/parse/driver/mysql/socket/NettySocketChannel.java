@@ -7,31 +7,30 @@ import io.netty.channel.Channel;
 import io.netty.util.internal.OutOfDirectMemoryError;
 import io.netty.util.internal.PlatformDependent;
 import io.netty.util.internal.SystemPropertyUtil;
-
-import java.io.IOException;
-import java.net.SocketAddress;
-
 import org.apache.commons.lang.NotImplementedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.net.SocketAddress;
+
 /**
  * 封装netty的通信channel和数据接收缓存，实现读、写、连接校验的功能。 2016-12-28
- * 
+ *
  * @author luoyaogui
  */
 public class NettySocketChannel implements SocketChannel {
 
-    private static final Logger logger                   = LoggerFactory.getLogger(SocketChannel.class);
-    private static final int    WAIT_PERIOD              = 10;                                                                   // milliseconds
-    private static final int    DEFAULT_INIT_BUFFER_SIZE = 1024 * 1024;                                                          // 1MB，默认初始缓存大小
+    private static final Logger logger = LoggerFactory.getLogger(SocketChannel.class);
+    private static final int WAIT_PERIOD = 10;                                                                   // milliseconds
+    private static final int DEFAULT_INIT_BUFFER_SIZE = 1024 * 1024;                                                          // 1MB，默认初始缓存大小
     // 参考 mysql-connector-java-5.1.40.jar: com.mysql.jdbc.MysqlIO.maxThreeBytes
     // < 256 * 256 * 256 = 16MB
-    private static final int    DEFAULT_MAX_BUFFER_SIZE  = 16 * DEFAULT_INIT_BUFFER_SIZE;                                        // 16MB，默认最大缓存大小
-    private Channel             channel                  = null;
+    private static final int DEFAULT_MAX_BUFFER_SIZE = 16 * DEFAULT_INIT_BUFFER_SIZE;                                        // 16MB，默认最大缓存大小
+    private Channel channel = null;
     private Object              lock                     = new Object();
-    private ByteBuf             cache                    = PooledByteBufAllocator.DEFAULT.directBuffer(DEFAULT_INIT_BUFFER_SIZE); // 缓存大小
-    private int                 maxDirectBuffer          = cache.maxCapacity();
+    private ByteBuf cache = PooledByteBufAllocator.DEFAULT.directBuffer(DEFAULT_INIT_BUFFER_SIZE); // 缓存大小
+    private int maxDirectBuffer = cache.maxCapacity();
 
     public Channel getChannel() {
         return channel;
@@ -73,9 +72,9 @@ public class NettySocketChannel implements SocketChannel {
                                 try {
                                     cache.capacity(newCapacity);
                                     logger.info("shrink cache capacity: {} - {} = {} bytes",
-                                        oldCapacity,
-                                        oldCapacity - newCapacity,
-                                        newCapacity);
+                                            oldCapacity,
+                                            oldCapacity - newCapacity,
+                                            newCapacity);
                                 } catch (OutOfMemoryError ignore) {
                                     maxDirectBuffer = oldCapacity; // 未来不再超过当前容量，记录日志后继续
                                     logger.warn("cache OutOfMemoryError: {} bytes", newCapacity, ignore);
@@ -95,9 +94,9 @@ public class NettySocketChannel implements SocketChannel {
                             try {
                                 cache.capacity(newCapacity);
                                 logger.info("expand cache capacity: {} + {} = {} bytes",
-                                    oldCapacity,
-                                    newCapacity - oldCapacity,
-                                    newCapacity);
+                                        oldCapacity,
+                                        newCapacity - oldCapacity,
+                                        newCapacity);
                             } catch (OutOfDirectMemoryError e) {
                                 // failed to allocate 885571168 byte(s) of
                                 // direct memory (used: 1002946176, max:
@@ -113,9 +112,9 @@ public class NettySocketChannel implements SocketChannel {
                                     try {
                                         cache.capacity(newCapacity);
                                         logger.info("expand cache capacity: {} + {} = {} bytes",
-                                            oldCapacity,
-                                            newCapacity - oldCapacity,
-                                            newCapacity);
+                                                oldCapacity,
+                                                newCapacity - oldCapacity,
+                                                newCapacity);
                                     } catch (OutOfMemoryError ignore) {
                                         maxDirectBuffer = oldCapacity; // 未来不再超过当前容量，记录日志后继续
                                         logger.warn("cache OutOfMemoryError: {} bytes", newCapacity, ignore);
@@ -150,6 +149,7 @@ public class NettySocketChannel implements SocketChannel {
         }
     }
 
+    @Override
     public void write(byte[]... buf) throws IOException {
         if (channel != null && channel.isWritable()) {
             channel.writeAndFlush(Unpooled.copiedBuffer(buf));
@@ -158,10 +158,12 @@ public class NettySocketChannel implements SocketChannel {
         }
     }
 
+    @Override
     public byte[] read(int readSize) throws IOException {
         return read(readSize, 0);
     }
 
+    @Override
     public byte[] read(int readSize, int timeout) throws IOException {
         int accumulatedWaitTime = 0;
 
@@ -208,18 +210,22 @@ public class NettySocketChannel implements SocketChannel {
         throw new NotImplementedException();
     }
 
+    @Override
     public boolean isConnected() {
-        return channel != null ? true : false;
+        return channel != null;
     }
 
+    @Override
     public SocketAddress getRemoteSocketAddress() {
         return channel != null ? channel.remoteAddress() : null;
     }
 
+    @Override
     public SocketAddress getLocalSocketAddress() {
         return channel != null ? channel.localAddress() : null;
     }
 
+    @Override
     public void close() {
         if (channel != null) {
             channel.close();

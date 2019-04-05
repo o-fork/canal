@@ -1,33 +1,33 @@
 package com.alibaba.otter.canal.parse.driver.mysql.packets.server;
 
-import java.io.IOException;
-
 import com.alibaba.otter.canal.parse.driver.mysql.packets.HeaderPacket;
 import com.alibaba.otter.canal.parse.driver.mysql.packets.PacketWithHeaderPacket;
 import com.alibaba.otter.canal.parse.driver.mysql.utils.ByteHelper;
 import com.alibaba.otter.canal.parse.driver.mysql.utils.MSC;
 
+import java.io.IOException;
+
 /**
  * MySQL Handshake Initialization Packet.<br>
- * 
+ *
  * @author fujohnwang
  * @since 1.0
  */
 public class HandshakeInitializationPacket extends PacketWithHeaderPacket {
 
-    public byte   protocolVersion = MSC.DEFAULT_PROTOCOL_VERSION;
+    public byte protocolVersion = MSC.DEFAULT_PROTOCOL_VERSION;
     public String serverVersion;
-    public long   threadId;
+    public long threadId;
     public byte[] seed;
-    public int    serverCapabilities;
-    public byte   serverCharsetNumber;
-    public int    serverStatus;
+    public int serverCapabilities;
+    public byte serverCharsetNumber;
+    public int serverStatus;
     public byte[] restOfScrambleBuff;
 
-    public HandshakeInitializationPacket(){
+    public HandshakeInitializationPacket() {
     }
 
-    public HandshakeInitializationPacket(HeaderPacket header){
+    public HandshakeInitializationPacket(HeaderPacket header) {
         super(header);
     }
 
@@ -47,6 +47,7 @@ public class HandshakeInitializationPacket extends PacketWithHeaderPacket {
      *  13                           rest of scramble_buff (4.1)
      * </pre>
      */
+    @Override
     public void fromBytes(byte[] data) {
         int index = 0;
         // 1. read protocol_version
@@ -62,7 +63,8 @@ public class HandshakeInitializationPacket extends PacketWithHeaderPacket {
         // 4. read scramble_buff
         seed = ByteHelper.readFixedLengthBytes(data, index, 8);
         index += 8;
-        index += 1; // 1 byte (filler) always 0x00
+        // 1 byte (filler) always 0x00
+        index += 1;
         // 5. read server_capabilities
         this.serverCapabilities = ByteHelper.readUnsignedShortLittleEndian(data, index);
         index += 2;
@@ -75,8 +77,9 @@ public class HandshakeInitializationPacket extends PacketWithHeaderPacket {
         // 8. bypass filtered bytes
         index += 13;
         // 9. read rest of scramble_buff
-        this.restOfScrambleBuff = ByteHelper.readFixedLengthBytes(data, index, 12); // 虽然Handshake
-                                                                                    // Initialization
+        // 虽然Handshake
+        this.restOfScrambleBuff = ByteHelper.readFixedLengthBytes(data, index, 12);
+        // Initialization
         // Packet规定最后13个byte是剩下的scrumble,
         // 但实际上最后一个字节是0, 不应该包含在scrumble中.
         // end read
@@ -85,6 +88,7 @@ public class HandshakeInitializationPacket extends PacketWithHeaderPacket {
     /**
      * Bypass implementing it, 'cause nowhere to use it.
      */
+    @Override
     public byte[] toBytes() throws IOException {
         return null;
     }

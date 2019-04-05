@@ -1,48 +1,43 @@
 package com.alibaba.otter.canal.meta;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.util.Assert;
-
 import com.alibaba.otter.canal.meta.exception.CanalMetaManagerException;
 import com.alibaba.otter.canal.protocol.ClientIdentity;
 import com.alibaba.otter.canal.protocol.position.Position;
 import com.alibaba.otter.canal.protocol.position.PositionRange;
 import com.google.common.base.Function;
 import com.google.common.collect.MigrateMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.util.Assert;
+
+import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 基于定时刷新的策略的mixed实现
- * 
+ *
  * <pre>
  * 几个优化：
  * 1. 去除batch数据刷新到zk中，切换时batch数据可忽略，重新从头开始获取
  * 2. cursor的更新，启用定时刷新，合并多次请求。如果最近没有变化则不更新
  * </pre>
- * 
+ *
  * @author jianghang 2012-9-11 下午02:41:15
  * @version 1.0.0
  */
 public class PeriodMixedMetaManager extends MemoryMetaManager implements CanalMetaManager {
 
-    private static final Logger      logger     = LoggerFactory.getLogger(PeriodMixedMetaManager.class);
+    private static final Logger logger = LoggerFactory.getLogger(PeriodMixedMetaManager.class);
     private ScheduledExecutorService executor;
-    private ZooKeeperMetaManager     zooKeeperMetaManager;
+    private ZooKeeperMetaManager zooKeeperMetaManager;
     @SuppressWarnings("serial")
-    private final Position           nullCursor = new Position() {
-                                                };
-    private long                     period     = 1000;                                                 // 单位ms
-    private Set<ClientIdentity>      updateCursorTasks;
+    private final Position nullCursor = new Position() {
+    };
+    // 单位ms
+    private long period = 1000;
+    private Set<ClientIdentity> updateCursorTasks;
 
     public void start() {
         super.start();

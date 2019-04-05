@@ -30,6 +30,7 @@ public class LoggerAdapterExample implements OuterAdapter {
 
     }
 
+    @Override
     public void sync(List<Dml> dmls) {
         for (Dml dml : dmls) {
             sync(dml);

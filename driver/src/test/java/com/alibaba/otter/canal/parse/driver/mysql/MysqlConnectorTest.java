@@ -1,26 +1,36 @@
 package com.alibaba.otter.canal.parse.driver.mysql;
 
-import java.io.IOException;
-import java.net.InetSocketAddress;
-
+import com.alibaba.otter.canal.parse.driver.mysql.packets.server.ResultSetPacket;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
-import com.alibaba.otter.canal.parse.driver.mysql.packets.server.ResultSetPacket;
+import java.io.IOException;
+import java.net.InetSocketAddress;
 
 public class MysqlConnectorTest {
 
     @Test
+    @Ignore
     public void testQuery() {
 
-        MysqlConnector connector = new MysqlConnector(new InetSocketAddress("127.0.0.1", 3306), "xxxxx", "xxxxx");
+        MysqlConnector connector = new MysqlConnector(
+                new InetSocketAddress("127.0.0.1", 3306),
+                "root",
+                "1723"
+        );
+
         try {
             connector.connect();
+
             MysqlQueryExecutor executor = new MysqlQueryExecutor(connector);
+
             ResultSetPacket result = executor.query("show variables like '%char%';");
             System.out.println(result);
-            result = executor.query("select * from test.test1");
+
+            result = executor.query("select * from mysql.user");
             System.out.println(result);
+
         } catch (IOException e) {
             Assert.fail(e.getMessage());
         } finally {
@@ -32,10 +42,17 @@ public class MysqlConnectorTest {
         }
     }
 
-    // @Test
+    @Test
+    @Ignore
     public void testUpdate() {
 
-        MysqlConnector connector = new MysqlConnector(new InetSocketAddress("127.0.0.1", 3306), "xxxxx", "xxxxx");
+        MysqlConnector connector = new MysqlConnector(
+                new InetSocketAddress("127.0.0.1", 3306),
+                "root",
+                "1723"
+        );
+
+
         try {
             connector.connect();
             MysqlUpdateExecutor executor = new MysqlUpdateExecutor(connector);

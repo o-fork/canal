@@ -60,6 +60,7 @@ public class ResultSetHeaderPacket extends PacketWithHeaderPacket {
         this.extra = extra;
     }
 
+    @Override
     public String toString() {
         return "ResultSetHeaderPacket [columnCount=" + columnCount + ", extra=" + extra + "]";
     }

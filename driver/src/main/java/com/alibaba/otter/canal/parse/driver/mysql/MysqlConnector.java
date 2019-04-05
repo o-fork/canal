@@ -1,12 +1,5 @@
 package com.alibaba.otter.canal.parse.driver.mysql;
 
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.alibaba.otter.canal.parse.driver.mysql.packets.HeaderPacket;
 import com.alibaba.otter.canal.parse.driver.mysql.packets.client.ClientAuthenticationPacket;
 import com.alibaba.otter.canal.parse.driver.mysql.packets.client.QuitCommandPacket;
@@ -17,6 +10,12 @@ import com.alibaba.otter.canal.parse.driver.mysql.socket.SocketChannel;
 import com.alibaba.otter.canal.parse.driver.mysql.socket.SocketChannelPool;
 import com.alibaba.otter.canal.parse.driver.mysql.utils.MySQLPasswordEncrypter;
 import com.alibaba.otter.canal.parse.driver.mysql.utils.PacketManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 基于mysql socket协议的链接实现
@@ -58,8 +57,7 @@ public class MysqlConnector {
         this.password = password;
     }
 
-    public MysqlConnector(InetSocketAddress address, String username, String password, byte charsetNumber,
-                          String defaultSchema){
+    public MysqlConnector(InetSocketAddress address, String username, String password, byte charsetNumber, String defaultSchema) {
         this(address, username, password);
 
         this.charsetNumber = charsetNumber;
@@ -152,7 +150,8 @@ public class MysqlConnector {
     private void negotiate(SocketChannel channel) throws IOException {
         HeaderPacket header = PacketManager.readHeader(channel, 4, timeout);
         byte[] body = PacketManager.readBytes(channel, header.getPacketBodyLength(), timeout);
-        if (body[0] < 0) {// check field_count
+        // check field_count
+        if (body[0] < 0) {
             if (body[0] == -1) {
                 ErrorPacket error = new ErrorPacket();
                 error.fromBytes(body);
@@ -165,7 +164,8 @@ public class MysqlConnector {
         }
         HandshakeInitializationPacket handshakePacket = new HandshakeInitializationPacket();
         handshakePacket.fromBytes(body);
-        connectionId = handshakePacket.threadId; // 记录一下connection
+        // 记录一下connection
+        connectionId = handshakePacket.threadId;
 
         logger.info("handshake initialization packet received, prepare the client authentication packet to send");
 

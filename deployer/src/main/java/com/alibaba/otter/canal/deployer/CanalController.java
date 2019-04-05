@@ -76,12 +76,7 @@ public class CanalController {
     }
 
     public CanalController(final Properties properties){
-        managerClients = MigrateMap.makeComputingMap(new Function<String, CanalConfigClient>() {
-
-            public CanalConfigClient apply(String managerAddress) {
-                return getManagerClient(managerAddress);
-            }
-        });
+        managerClients = MigrateMap.makeComputingMap(managerAddress -> getManagerClient(managerAddress));
 
         // 初始化全局参数设置
         globalInstanceConfig = initGlobalConfig(properties);
