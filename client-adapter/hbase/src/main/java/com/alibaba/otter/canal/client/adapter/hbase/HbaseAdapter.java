@@ -96,12 +96,13 @@ public class HbaseAdapter implements OuterAdapter {
             hbaseSyncService = new HbaseSyncService(hbaseTemplate);
 
             configMonitor = new HbaseConfigMonitor();
-            configMonitor.init(this);
+            configMonitor.init(this, envProperties);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
+    @Override
     public void sync(List<Dml> dmls) {
         if (dmls == null || dmls.isEmpty()) {
             return;
@@ -111,7 +112,7 @@ public class HbaseAdapter implements OuterAdapter {
         }
     }
 
-    public void sync(Dml dml) {
+    private void sync(Dml dml) {
         if (dml == null) {
             return;
         }

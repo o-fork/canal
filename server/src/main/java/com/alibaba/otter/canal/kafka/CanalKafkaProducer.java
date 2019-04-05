@@ -1,5 +1,6 @@
 package com.alibaba.otter.canal.kafka;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -32,9 +33,7 @@ public class CanalKafkaProducer implements CanalMQProducer {
     private static final Logger       logger = LoggerFactory.getLogger(CanalKafkaProducer.class);
 
     private Producer<String, Message> producer;
-
     private Producer<String, String>  producer2;                                                 // 用于扁平message的数据投递
-
     private MQProperties              kafkaProperties;
 
     @Override
@@ -49,6 +48,7 @@ public class CanalKafkaProducer implements CanalMQProducer {
         properties.put("max.request.size", kafkaProperties.getMaxRequestSize());
         properties.put("buffer.memory", kafkaProperties.getBufferMemory());
         properties.put("key.serializer", StringSerializer.class.getName());
+        properties.put("max.in.flight.requests.per.connection", 1);
 
         if (!kafkaProperties.getProperties().isEmpty()) {
             properties.putAll(kafkaProperties.getProperties());
@@ -108,8 +108,9 @@ public class CanalKafkaProducer implements CanalMQProducer {
         try {
             if (!StringUtils.isEmpty(canalDestination.getDynamicTopic())) {
                 // 动态topic
-                Map<String, Message> messageMap = MQMessageUtils
-                    .messageTopics(message, canalDestination.getTopic(), canalDestination.getDynamicTopic());
+                Map<String, Message> messageMap = MQMessageUtils.messageTopics(message,
+                    canalDestination.getTopic(),
+                    canalDestination.getDynamicTopic());
 
                 for (Map.Entry<String, Message> entry : messageMap.entrySet()) {
                     String topicName = entry.getKey().replace('.', '_');
@@ -126,7 +127,7 @@ public class CanalKafkaProducer implements CanalMQProducer {
                 producerTmp.commitTransaction();
             }
             callback.commit();
-        } catch (Exception e) {
+        } catch (Throwable e) {
             logger.error(e.getMessage(), e);
             if (kafkaProperties.getTransaction()) {
                 producerTmp.abortTransaction();
@@ -135,33 +136,28 @@ public class CanalKafkaProducer implements CanalMQProducer {
         }
     }
 
-    private void send(MQProperties.CanalDestination canalDestination, String topicName,
-                      Message message) throws Exception {
+    private void send(MQProperties.CanalDestination canalDestination, String topicName, Message message)
+                                                                                                        throws Exception {
         if (!kafkaProperties.getFlatMessage()) {
-            ProducerRecord<String, Message> record = null;
-            if (canalDestination.getPartition() != null) {
-                record = new ProducerRecord<>(topicName, canalDestination.getPartition(), null, message);
-            } else {
-                if (canalDestination.getPartitionHash() != null && !canalDestination.getPartitionHash().isEmpty()) {
-                    Message[] messages = MQMessageUtils.messagePartition(message,
-                        canalDestination.getPartitionsNum(),
-                        canalDestination.getPartitionHash());
-                    int length = messages.length;
-                    for (int i = 0; i < length; i++) {
-                        Message messagePartition = messages[i];
-                        if (messagePartition != null) {
-                            record = new ProducerRecord<>(topicName, i, null, messagePartition);
-                        }
+            List<ProducerRecord<String, Message>> records = new ArrayList<ProducerRecord<String, Message>>();
+            if (canalDestination.getPartitionHash() != null && !canalDestination.getPartitionHash().isEmpty()) {
+                Message[] messages = MQMessageUtils.messagePartition(message,
+                    canalDestination.getPartitionsNum(),
+                    canalDestination.getPartitionHash());
+                int length = messages.length;
+                for (int i = 0; i < length; i++) {
+                    Message messagePartition = messages[i];
+                    if (messagePartition != null) {
+                        records.add(new ProducerRecord<String, Message>(topicName, i, null, messagePartition));
                     }
-                } else {
-                    record = new ProducerRecord<>(topicName, 0, null, message);
                 }
+            } else {
+                final int partition = canalDestination.getPartition() != null ? canalDestination.getPartition() : 0;
+                records.add(new ProducerRecord<String, Message>(topicName, partition, null, message));
             }
 
-            if (record != null) {
-                if (kafkaProperties.getTransaction()) {
-                    producer.send(record);
-                } else {
+            if (!records.isEmpty()) {
+                for (ProducerRecord<String, Message> record : records) {
                     producer.send(record).get();
                 }
 
@@ -174,13 +170,7 @@ public class CanalKafkaProducer implements CanalMQProducer {
             List<FlatMessage> flatMessages = MQMessageUtils.messageConverter(message);
             if (flatMessages != null) {
                 for (FlatMessage flatMessage : flatMessages) {
-                    if (StringUtils.isEmpty(canalDestination.getPartitionHash())) {
-                        Integer partition = canalDestination.getPartition();
-                        if (partition == null) {
-                            partition = 0;
-                        }
-                        produce(topicName, partition, flatMessage);
-                    } else {
+                    if (canalDestination.getPartitionHash() != null && !canalDestination.getPartitionHash().isEmpty()) {
                         FlatMessage[] partitionFlatMessage = MQMessageUtils.messagePartition(flatMessage,
                             canalDestination.getPartitionsNum(),
                             canalDestination.getPartitionHash());
@@ -191,6 +181,9 @@ public class CanalKafkaProducer implements CanalMQProducer {
                                 produce(topicName, i, flatMessagePart);
                             }
                         }
+                    } else {
+                        final int partition = canalDestination.getPartition() != null ? canalDestination.getPartition() : 0;
+                        produce(topicName, partition, flatMessage);
                     }
 
                     if (logger.isDebugEnabled()) {
@@ -204,7 +197,7 @@ public class CanalKafkaProducer implements CanalMQProducer {
     }
 
     private void produce(String topicName, int partition, FlatMessage flatMessage) throws ExecutionException,
-                                                                                   InterruptedException {
+                                                                                  InterruptedException {
         ProducerRecord<String, String> record = new ProducerRecord<String, String>(topicName,
             partition,
             null,
@@ -212,7 +205,7 @@ public class CanalKafkaProducer implements CanalMQProducer {
         if (kafkaProperties.getTransaction()) {
             producer2.send(record);
         } else {
-            producer2.send(record).get();
+            producer2.send(record);
         }
     }
 

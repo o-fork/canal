@@ -123,6 +123,9 @@ public class RdbAdapter implements OuterAdapter {
         dataSource.setTimeBetweenEvictionRunsMillis(60000);
         dataSource.setMinEvictableIdleTimeMillis(300000);
         dataSource.setUseUnfairLock(true);
+        // List<String> array = new ArrayList<>();
+        // array.add("set names utf8mb4;");
+        // dataSource.setConnectionInitSqls(array);
 
         try {
             dataSource.init();
@@ -146,7 +149,7 @@ public class RdbAdapter implements OuterAdapter {
             skipDupException);
 
         rdbConfigMonitor = new RdbConfigMonitor();
-        rdbConfigMonitor.init(configuration.getKey(), this);
+        rdbConfigMonitor.init(configuration.getKey(), this, envProperties);
     }
 
     /**

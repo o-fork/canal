@@ -10,10 +10,15 @@ import java.util.stream.Collectors;
 import com.alibaba.fastsql.sql.SQLUtils;
 import com.alibaba.fastsql.sql.ast.SQLExpr;
 import com.alibaba.fastsql.sql.ast.expr.SQLBinaryOpExpr;
+import com.alibaba.fastsql.sql.ast.expr.SQLCaseExpr;
 import com.alibaba.fastsql.sql.ast.expr.SQLIdentifierExpr;
 import com.alibaba.fastsql.sql.ast.expr.SQLMethodInvokeExpr;
 import com.alibaba.fastsql.sql.ast.expr.SQLPropertyExpr;
-import com.alibaba.fastsql.sql.ast.statement.*;
+import com.alibaba.fastsql.sql.ast.statement.SQLExprTableSource;
+import com.alibaba.fastsql.sql.ast.statement.SQLJoinTableSource;
+import com.alibaba.fastsql.sql.ast.statement.SQLSelectStatement;
+import com.alibaba.fastsql.sql.ast.statement.SQLSubqueryTableSource;
+import com.alibaba.fastsql.sql.ast.statement.SQLTableSource;
 import com.alibaba.fastsql.sql.dialect.mysql.ast.statement.MySqlSelectQueryBlock;
 import com.alibaba.fastsql.sql.dialect.mysql.parser.MySqlStatementParser;
 import com.alibaba.fastsql.sql.parser.ParserException;
@@ -121,6 +126,10 @@ public class SqlParser {
             fieldItem.setBinaryOp(true);
             visitColumn(sqlBinaryOpExpr.getLeft(), fieldItem);
             visitColumn(sqlBinaryOpExpr.getRight(), fieldItem);
+        } else if (expr instanceof SQLCaseExpr) {
+            SQLCaseExpr sqlCaseExpr = (SQLCaseExpr) expr;
+            fieldItem.setMethod(true);
+            sqlCaseExpr.getItems().forEach(item-> visitColumn(item.getConditionExpr(), fieldItem));
         }
     }
 
