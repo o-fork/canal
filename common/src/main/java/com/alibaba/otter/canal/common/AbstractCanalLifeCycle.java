@@ -32,7 +32,6 @@ public abstract class AbstractCanalLifeCycle implements CanalLifeCycle {
         if (!running) {
             throw new CanalException(this.getClass().getName() + " isn't start , please check");
         }
-
         running = false;
     }
 
